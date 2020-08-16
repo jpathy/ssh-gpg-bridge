@@ -1,0 +1,70 @@
+name: Build
+
+on:
+  push:
+    branches:
+    - master
+    tags:
+    - v[0-9]**
+
+jobs:
+  build:
+    name: Build Project
+    runs-on: windows-latest
+
+    steps:
+    - name: Add msbuild to PATH
+      uses: microsoft/setup-msbuild@v1
+      with:
+        vs-version: '[16.5,)'
+
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+
+    - name: Compiling solution
+      run: |
+        nuget restore
+        MSBuild.exe -verbosity:m -t:Rebuild -p:Platform=x64 -p:Configuration=Release
+      shell: pwsh
+
+    - name: Generate changelog
+      if: startsWith(github.ref, 'refs/tags/')
+      run: |
+        try {
+          $lT = (git describe --tags --abbrev=0 HEAD^ 2>$null)
+        }
+        catch {}
+        $CLPath="./Changelog.md"
+        Write-Output "## Changes`n" | Out-File -FilePath ${CLPath} -Append
+        git log --no-decorate --oneline $($lT ? "${lT}..HEAD": "HEAD") | ForEach-Object { "* $_" } | Out-File -FilePath ${CLPath} -Append
+        Write-Output "::set-env name=CLPATH::$CLPath"
+      shell: pwsh -File {0}
+
+    - name: Create asset
+      if: startsWith(github.ref, 'refs/tags/')
+      run: |
+        $assetName = "ssh-gpg-bridge-$(""${{ github.ref }}"".Replace('refs/tags/', ''))-x64.zip"
+        Compress-Archive -Path .\x64\Release\ssh-gpg-bridge.exe -DestinationPath ".\$assetName"
+        Write-Output "::set-env name=ASSETNAME::$assetName"
+      shell: pwsh
+
+    - uses: actions/create-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      id: create_release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        body_path: ${{ env.CLPATH }}
+
+    - uses: actions/upload-release-asset@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+      with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./${{ env.ASSETNAME }}
+          asset_name: ${{ env.ASSETNAME }}
+          asset_content_type:  application/zip

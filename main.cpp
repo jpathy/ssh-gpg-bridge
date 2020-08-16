@@ -1,19 +1,6 @@
 ﻿#include "pch.h"
 #include <DispatcherQueue.h>
 #include <Windows.h>
-#include <psapi.h>
-#include <sddl.h>
-#include <shellapi.h>
-#include <tchar.h>
-#include <strsafe.h>
-#include <string.h>
-#include <ppl.h>
-#include <ppltasks.h>
-#include <pplawait.h>
-#include <iostream>
-#include <sstream>
-#include <fstream>
-#include <string>
 #include <string_view>
 
 #include "helper.h"

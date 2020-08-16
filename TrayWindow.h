@@ -1,7 +1,8 @@
 #pragma once
-#include <windows.h>
+#include <Windows.h>
 #include <shellapi.h>
 #include <tchar.h>
+#include <psapi.h>
 #include <strsafe.h>
 #include <optional>
 #include "resource.h"
@@ -135,8 +136,8 @@ inline LRESULT __stdcall TrayWindow::WndProc(HWND const window, UINT const messa
 		winrt::attach_abi(e, (HSTRING)wparam);
 		getThis()->err = e;
 	}
-		DestroyWindow(window);
-		return 0;
+	DestroyWindow(window);
+	return 0;
 	case WM_DESTROY:
 	{
 		auto thisObj = getThis();
@@ -150,7 +151,7 @@ inline LRESULT __stdcall TrayWindow::WndProc(HWND const window, UINT const messa
 		}
 		PostQuitMessage(n);
 	}
-		return 0;
+	return 0;
 	case WM_ENDSESSION:
 		Shell_NotifyIcon(NIM_DELETE, &(getThis()->nid));
 		return 0;

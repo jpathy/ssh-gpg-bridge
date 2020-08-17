@@ -280,7 +280,17 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ PWSTR, _In_ int)
 		auto controller{ CreateDispatcherQueueController() };
 		auto monitorAgent{ KeepAgentLive(trayWnd, controller.DispatcherQueue()) };
 		PipeServer server(gPipeName);
-		server.Start();
+		if (!server.Start()) {
+			throw std::runtime_error("Failed to start Named pipeserver.");
+		}
+		auto onExit = concurrency::create_task([&]() {
+			auto eStatus = server.Wait();
+			if (!eStatus) {
+				trayWnd.forceClose(eStatus.message());
+			}
+
+			return;
+			});
 
 		BOOL bRet;
 		while ((bRet = GetMessage(&msg, NULL, 0, 0)) != 0)
@@ -299,7 +309,7 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ PWSTR, _In_ int)
 
 		monitorAgent.Cancel();
 		server.Stop();
-		server.Wait();
+		onExit.get();
 	}
 	catch (hresult_error& e) {
 		while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE));

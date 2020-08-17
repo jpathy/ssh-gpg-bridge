@@ -210,6 +210,7 @@ bool PipeServer::Start() {
 		catch (...) { hasException = true; }
 
 		// post special packet to stop processor task and wait.
+		// Important: we do this after all tasks have been finished since completion loop signals the tasks(see ctx.done).
 		PostQueuedCompletionStatus(m_iocp, 0, 0, 0);
 		try {
 			processor.wait();
@@ -226,7 +227,6 @@ bool PipeServer::Start() {
 
 	return true;
 }
-
 
 void PipeServer::Stop() {
 	concurrency::reader_writer_lock::scoped_lock_read rL(runLock);
@@ -245,6 +245,10 @@ PipeServer::~PipeServer() {
 	}
 	catch (...) {}
 	CloseHandle(m_iocp);
+}
+
+inline bool PipeServer::IsClosed() {
+	return !eClose->wait(0);
 }
 
 std::shared_ptr<PipeServer::PipeInstance> PipeServer::Accept() {
@@ -280,8 +284,8 @@ std::shared_ptr<PipeServer::PipeInstance> PipeServer::Accept() {
 		auto nIdx = concurrency::event::wait_for_multiple(events, 2, false);
 		if (nIdx != 0) {
 			CancelIoEx(hPipe, (LPOVERLAPPED)&ctx);
+			ctx.done.wait();
 		}
-		ctx.done.wait();
 		if (ctx.err) {
 			CloseHandle(hPipe);
 			return nullptr;
@@ -290,13 +294,9 @@ std::shared_ptr<PipeServer::PipeInstance> PipeServer::Accept() {
 	return std::shared_ptr<PipeInstance>(new PipeInstance(hPipe, eClose));
 }
 
-inline bool PipeServer::IsClosed() {
-	return !eClose->wait(0);
-}
-
 template<typename ... Args>
 inline void PipeServer::Stop(Args&& ... args) {
-	concurrency::reader_writer_lock::scoped_lock exL(runLock);
+	concurrency::reader_writer_lock::scoped_lock_read rL(runLock);
 	concurrency::send(status, ExitStatus(std::forward<Args>(args)...));
 	eClose->set();
 }
@@ -306,7 +306,7 @@ concurrency::task<void> PipeServer::Process() {
 		DWORD nbytesTransferred;
 		ULONG_PTR completionKey;
 		IocpContext* ctx = nullptr;
-		DWORD err;
+		DWORD err = 0;
 		concurrency::Context::Oversubscribe(true);
 		for (;;) {
 			auto bSuccess = GetQueuedCompletionStatus(m_iocp, &nbytesTransferred, &completionKey, (LPOVERLAPPED*)&ctx, INFINITE);
@@ -354,6 +354,11 @@ concurrency::task<void> PipeServer::Process() {
 				winrt::to_hstring("GetQueuedCompletionStatus failed with error: ") + winrt::hresult_error(HRESULT_FROM_WIN32(err)).message());
 		}
 		});
+}
+
+PipeServer::ExitCode PipeServer::ExitStatus::code() const
+{
+	return c;
 }
 
 wchar_t const* PipeServer::ExitStatus::message() const

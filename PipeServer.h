@@ -53,16 +53,16 @@ public:
 		ERROR_PROCESSING,
 	};
 	class ExitStatus {
-		ExitCode code;
+		ExitCode c;
 		winrt::hstring msg;
 
-		ExitStatus(ExitCode code) : code(code) {
+		ExitStatus(ExitCode code) : c(code) {
 			auto s = to_string(code);
 			msg = winrt::hstring(s, (uint32_t)std::wcslen(s));
 		}
 
-		ExitStatus(ExitCode code, winrt::hstring msg) : code(code), msg(msg) {}
-		
+		ExitStatus(ExitCode code, winrt::hstring msg) : c(code), msg(msg) {}
+
 		static constexpr const wchar_t* to_string(ExitCode c) {
 			switch (c) {
 			case ExitCode::SUCCESS:
@@ -89,6 +89,12 @@ public:
 		ExitStatus() : ExitStatus(ExitCode::SUCCESS) {}
 
 		wchar_t const* message() const;
+
+		ExitCode code() const;
+
+		operator bool() const {
+			return c == ExitCode::SUCCESS;
+		}
 	};
 
 	class PipeInstance {
@@ -118,6 +124,7 @@ public:
 
 	void Stop();
 
+	// Blocking wait till exit.
 	ExitStatus Wait();
 
 	~PipeServer();
@@ -126,9 +133,9 @@ private:
 	LPCTSTR m_pipeName;
 	HANDLE m_iocp;
 
-	concurrency::overwrite_buffer<ExitStatus> status;
-
 	concurrency::reader_writer_lock runLock;
+
+	concurrency::overwrite_buffer<ExitStatus> status;
 
 	std::shared_ptr<concurrency::event> eClose;
 	concurrency::task<ExitStatus> waiter;
